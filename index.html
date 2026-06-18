@@ -470,7 +470,7 @@ function renderWrong(){
 let imgs=[],stream=null;
 function addImgs(files){[...files].forEach(f=>{if(imgs.length>=6)return;const rd=new FileReader();rd.onload=e=>{imgs.push(e.target.result);renderThumbs();};rd.readAsDataURL(f);});}
 function renderThumbs(){
-  const d=qs('#thumbs');d.innerHTML='';
+  const d=qs('#thumbs').innerHTML=imgs.map(src=> <img src="${src}" style="width:80px;height:80px;margin:5px"> ).join('');
   imgs.forEach((u,i)=>{const im=document.createElement('img');im.src=u;im.onclick=()=>{imgs.splice(i,1);renderThumbs();};d.appendChild(im);});
   qs('#solveBtn').style.display=imgs.length?'inline-block':'none';
   qs('#nImg').textContent=imgs.length;
