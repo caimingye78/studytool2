@@ -230,6 +230,11 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 <select id="qSubj" onchange="fillTopics()"><option>物理</option><option>数学</option><option>化学</option><option>生物</option></select>
 <select id="qTopic"></select>
 <select id="qLevel"><option>基础</option><option selected>中等</option><option>难题</option><option>竞赛级</option></select>
+<textarea id="qReq" placeholder="输入具体要求（如：要含三角函数，难度偏高考）" style="width:100%;margin-top:5px"></textarea>
+<div class="row">
+    <button class="sub" onclick="listen('qReq')">🎤 语音要求</button>
+    <button class="sub" onclick="scanToInput('qReq')">📷 拍参考题</button>
+</div>
 <button class="act" onclick="genQuiz()">📝 出一道题</button></div>
 <div class="out" id="quizOut">选择学科、章节和难度，AI 现场命题。</div>
 <div class="row"><button class="sub" id="showAns" style="display:none" onclick="quizAnswer()">💡 分步解答</button>
