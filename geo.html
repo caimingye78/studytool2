@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 几何实验室 v6.3 - 全自动交互版</title>
+    <style>
+        body { margin: 0; background: #0f1424; color: white; font-family: sans-serif; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 1000; width: calc(100% - 20px); max-width: 350px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        .card { background: rgba(26, 33, 56, 0.9); border: 1px solid #33406e; border-radius: 12px; padding: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); pointer-events: auto; backdrop-filter: blur(8px); }
+        textarea { width: 100%; background: #0a0e1c; color: white; border: 1px solid #33406e; padding: 10px; border-radius: 6px; box-sizing: border-box; font-size: 13px; resize: none; }
+        .btn-group { display: flex; gap: 8px; margin-top: 8px; }
+        button { flex: 1; background: linear-gradient(90deg, #4f6ef7, #9b59f7); color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; transition: opacity 0.2s; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.sub { background: #2b3760; }
+        
+        /* 图片预览优化 */
+        #preview-box { display: none; position: relative; width: 80px; height: 80px; margin-top: 8px; border: 2px solid #4f6ef7; border-radius: 6px; overflow: hidden; }
+        #img-prev { width: 100%; height: 100%; object-fit: cover; }
+        .close-btn { position: absolute; top: 0; right: 0; background: red; color: white; font-size: 10px; padding: 2px 5px; cursor: pointer; }
+
+        /* 状态提示 */
+        #status-bar { display: none; font-size: 12px; color: #7ee0a3; margin-top: 5px; font-weight: bold; }
+        .dot-ani::after { content: '...'; animation: dots 1.5s infinite; }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+
+        /* 解答区域优化 */
+        #out { font-size: 14px; line-height: 1.6; color: #cfd8f5; max-height: 50vh; overflow-y: auto; margin-top: 10px; border-top: 1px solid #33406e; padding-top: 10px; scrollbar-width: thin; }
+        .node-label { color: #7ee0a3; font-weight: bold; font-size: 15px; pointer-events: none; }
+        .measure-tag { color: #f77; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 4px; font-size: 12px; border: 1px solid #f77; }
+    </style>
+    <script>window.MathJax={tex:{inlineMath:[['$','$']]}};</script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+    <div id="ui">
+        <div class="card">
+            <textarea id="qIn" rows="2" placeholder="拍照或手动输入题目...">正方体ABCD-A1B1C1D1棱长2，求AC1的长度</textarea>
+            
+            <div id="preview-box">
+                <img id="img-prev">
+                <div class="close-btn" onclick="clearImg()">✕</div>
+            </div>
+
+            <div class="btn-group">
+                <button onclick="document.getElementById('fileIn').click()" class="sub">📷 拍照上传</button>
+                <button id="mainBtn" onclick="fullAutoSolve()">🚀 开始解析</button>
+            </div>
+            <input type="file" id="fileIn" accept="image/*" hidden onchange="handleImg(this)">
+            
+            <div id="status-bar"></div>
+            <div id="out"></div>
+        </div>
+    </div>
+    <div id="container"></div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// --- 1. 几何引擎 ---
+const GeoKernel = {
+    cube: (a=2) => ({ points: { A:[0,0,0], B:[a,0,0], C:[a,a,0], D:[0,a,0], A1:[0,0,a], B1:[a,0,a], C1:[a,a,a], D1:[0,a,a] }, edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']] }),
+    cylinder: (r=1.5, h=3.5) => ({ type:'cylinder', r, h, points: { O:[0,0,0], O1:[0,0,h] }, edges:[] }),
+    cone: (r=1.8, h=3.5) => ({ type:'cone', r, h, points: { O:[0,0,0], P:[0,0,h] }, edges:[] }),
+    pyramid: (a=2.2, h=3.5) => ({ points: { A:[-a/2,-a/2,0], B:[a/2,-a/2,0], C:[a/2,a/2,0], D:[-a/2,a/2,0], P:[0,0,h] }, edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P']] })
+};
+
+let scene, camera, renderer, labelRenderer, controls, group;
+let currentBase64 = null;
+
+function init() {
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0e1c);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(10, 8, 10);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('container').appendChild(renderer.domElement);
+    labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    labelRenderer.domElement.style.position = 'absolute'; labelRenderer.domElement.style.top = '0';
+    document.body.appendChild(labelRenderer.domElement);
+    controls = new OrbitControls(camera, renderer.domElement);
+    group = new THREE.Group(); scene.add(group);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    const light = new THREE.DirectionalLight(0xffffff, 0.5); light.position.set(5, 10, 7); scene.add(light);
+    renderLoop();
+}
+function renderLoop() { requestAnimationFrame(renderLoop); renderer.render(scene, camera); labelRenderer.render(scene, camera); }
+
+// --- 2. 交互逻辑 ---
+window.handleImg = (inp) => {
+    const file = inp.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        currentBase64 = e.target.result;
+        document.getElementById('img-prev').src = currentBase64;
+        document.getElementById('preview-box').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+};
+
+window.clearImg = () => {
+    currentBase64 = null;
+    document.getElementById('preview-box').style.display = 'none';
+    document.getElementById('fileIn').value = '';
+};
+
+function updateStatus(msg, isShow = true) {
+    const bar = document.getElementById('status-bar');
+    bar.style.display = isShow ? 'block' : 'none';
+    bar.innerHTML = isShow ? `<span class="dot-ani">${msg}</span>` : '';
+}
+
+window.fullAutoSolve = async () => {
+    const qIn = document.getElementById('qIn');
+    const out = document.getElementById('out');
+    const btn = document.getElementById('mainBtn');
+    const key = localStorage.getItem('zk');
+
+    if(!key) return out.innerHTML = "<b style='color:#f77'>⚠️ 错误：未检测到 API Key，请在主站设置。</b>";
+    
+    btn.disabled = true;
+    out.innerHTML = "";
+    updateStatus("正在处理");
+
+    try {
+        let problemText = qIn.value;
+
+        // 第一阶段：识别图片
+        if(currentBase64) {
+            updateStatus("📷 正在识别题目文字");
+            const vResp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+                method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                body: JSON.stringify({
+                    model: "glm-4v-flash",
+                    messages: [{ role: "user", content: [{ type: "text", text: "提取题目文字，只返回纯文本。" }, { type: "image_url", image_url: { url: currentBase64 } }]}]
+                })
+            });
+            const vData = await vResp.json();
+            problemText = vData.choices[0].message.content;
+            qIn.value = problemText;
+        }
+
+        // 第二阶段：本地建模 (瞬间完成)
+        updateStatus("🧊 正在构建3D空间模型");
+        renderModel(problemText);
+
+        // 第三阶段：深度解析
+        updateStatus("🧠 正在进行数学深度解析");
+        const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+            method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+            body: JSON.stringify({
+                model: "glm-4-flash",
+                messages: [{role: "user", content: `你是一位立体几何老师。详细解答：${problemText}。使用LaTeX公式，标注每一步。`}],
+                temperature: 0.7
+            })
+        });
+        const data = await resp.json();
+        out.innerHTML = "<b>💡 解析结果：</b><br>" + data.choices[0].message.content.replace(/\n/g, "<br>");
+        if(window.MathJax) MathJax.typesetPromise([out]);
+
+        updateStatus("✅ 解析完成", true);
+        setTimeout(() => updateStatus("", false), 3000);
+
+    } catch(e) {
+        out.innerHTML = "❌ 抱歉，处理过程中遇到网络抖动，请重试。";
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+    }
+};
+
+function renderModel(txt) {
+    while(group.children.length > 0) group.remove(group.children[0]);
+    let spec = /圆柱/.test(txt) ? GeoKernel.cylinder() : 
+               (/圆锥/.test(txt) ? GeoKernel.cone() : 
+               (/棱锥/.test(txt) ? GeoKernel.pyramid() : GeoKernel.cube()));
+    
+    const vMap = {};
+    Object.keys(spec.points).forEach(k => {
+        const p = spec.points[k]; vMap[k] = new THREE.Vector3(p[0], p[2], p[1]);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.12), new THREE.MeshBasicMaterial({color: 0x7ee0a3}));
+        dot.position.copy(vMap[k]); group.add(dot);
+        const div = document.createElement('div'); div.className = 'node-label'; div.textContent = k;
+        const lbl = new CSS2DObject(div); lbl.position.set(vMap[k].x, vMap[k].y + 0.5, vMap[k].z);
+        group.add(lbl);
+    });
+    
+    const lineMat = new THREE.LineBasicMaterial({color: 0x33406e});
+    if(spec.edges) spec.edges.forEach(e => {
+        const g = new THREE.BufferGeometry().setFromPoints([vMap[e[0]], vMap[e[1]]]);
+        group.add(new THREE.Line(g, lineMat));
+    });
+
+    if(spec.type === 'cylinder' || spec.type === 'cone') {
+        const geo = spec.type === 'cylinder' ? new THREE.CylinderGeometry(spec.r, spec.r, spec.h, 32) : new THREE.ConeGeometry(spec.r, spec.h, 32);
+        const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: 0x4f6ef7, transparent: true, opacity: 0.3, side: THREE.DoubleSide}));
+        mesh.position.y = spec.h/2; group.add(mesh);
+    }
+
+    // 自动寻找题目中的线段并高亮
+    const matches = txt.match(/[A-Z][0-1]?[A-Z][0-1]?/g);
+    if(matches) {
+        matches.forEach(m => {
+            const p1 = m.substring(0, m.length/2), p2 = m.substring(m.length/2);
+            if(vMap[p1] && vMap[p2]) {
+                const g = new THREE.BufferGeometry().setFromPoints([vMap[p1], vMap[p2]]);
+                group.add(new THREE.Line(g, new THREE.LineBasicMaterial({color: 0xffa500, linewidth: 3})));
+                const dist = vMap[p1].distanceTo(vMap[p2]).toFixed(1);
+                const tagDiv = document.createElement('div'); tagDiv.className = 'measure-tag'; tagDiv.textContent = `L=${dist}`;
+                const tag = new CSS2DObject(tagDiv); tag.position.copy(vMap[p1].clone().lerp(vMap[p2], 0.5));
+                group.add(tag);
+            }
+        });
+    }
+}
+
+init();
+</script>
+</body>
