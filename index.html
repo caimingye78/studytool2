@@ -409,7 +409,7 @@ function fillTopics(){const s=qs('#qSubj').value;qs('#qTopic').innerHTML=QT[s].m
 fillTopics();
 async function genQuiz(){
   qs('#ansOut').style.display='none';
-  const t=await callAI([{role:'user',content:`请出一道高中${qs('#qSubj').value}「${qs('#qTopic').value}」的${qs('#qLevel').value}题（含具体数字/条件），只给题目不给答案。公式用LaTeX行内$...$。`}],false,qs('#quizOut'));
+  const t=await callAI([{role:'user',content: `出一道${qs('#qSubj').value}题。具体要求：${qs('#qReq').value}`;
   if(t){lastQuestion=t;qs('#showAns').style.display='inline-block';qs('#varyBtn').style.display='inline-block';}
 }
 function quizAnswer(){qs('#ansOut').style.display='block';
