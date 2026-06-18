@@ -347,7 +347,31 @@ function explain(t){if(!t)return;callAI([{role:'user',content:`你是顶级理�
 
 /* ---------- 语音 ---------- */
 function speak(t){if(!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.slice(0,2500));u.lang='zh-CN';u.rate=1.05;speechSynthesis.speak(u);}
-function listen(id){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('浏览器不支持语音识别，建议 Chrome/Edge');return;}const r=new SR();r.lang='zh-CN';r.onresult=e=>{qs('#'+id).value=e.results[0][0].transcript;};r.start();}
+function listen(id) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return alert('当前浏览器不支持语音识别');
+    const r = new SR();
+    r.lang = 'zh-CN';
+    r.continuous = true; // 允许长句和停顿
+    r.interimResults = true; // 实时看到说话的文字
+    
+    const target = qs('#' + id);
+    const originalPlaceholder = target.placeholder;
+    target.placeholder = "正在听，请说话... (点击页面任意处停止)";
+    
+    r.onresult = e => {
+        let text = "";
+        for (let i = 0; i < e.results.length; i++) {
+            text += e.results[i][0].transcript;
+        }
+        target.value = text; // 自动打字，无需手动点击
+    };
+    
+    r.onend = () => { target.placeholder = originalPlaceholder; };
+    r.start();
+    // 点击页面任意地方停止录音
+    window.onclick = () => { r.stop(); window.onclick = null; };
+}
 
 /* ---------- 出题 ---------- */
 const QT={'物理':['运动学','牛顿定律','功和能','动量','圆周运动与万有引力','静电场','电路','磁场与电磁感应','机械振动与波','光学','热学','近代物理'],
