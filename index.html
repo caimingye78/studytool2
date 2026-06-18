@@ -76,6 +76,10 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 <div class="card"><h2>🧬 生物知识点</h2><div class="chips bio" id="topicsB"></div></div>
 <div class="card"><h2>自由提问（任何学科）</h2>
 <div class="row"><input type="text" id="customTopic" placeholder="输入任意问题，如：为什么酯化反应要用浓硫酸？" style="flex:1">
+<div class="row">
+    <button class="sub" onclick="listen('customTopic')">🎤 语音</button>
+    <button class="sub" onclick="scanToInput('customTopic')">📷 拍照提问</button>
+</div>
 <button class="act" onclick="explain(qs('#customTopic').value)">讲解</button></div>
 <div class="row"><button class="sub" onclick="speak(lastText)">🔊 朗读</button><button class="sub" onclick="speechSynthesis.cancel()">⏹ 停止</button><button class="sub" onclick="listen('customTopic')">🎤 语音提问</button></div>
 <div class="out" id="learnOut">点击上方知识点，AI 老师给出详细讲解（公式推导、典型例题、易错点）。</div>
